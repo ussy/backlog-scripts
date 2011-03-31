@@ -40,7 +40,10 @@ class BacklogOverlookedNotifier
 
   def overlooked_issue?(issue)
     comments = @client.call("backlog.getComments", issue["id"])
-    return true if comments.empty?
+    if comments.empty?
+      created_on = DateTime::strptime("#{issue['created_on']}#{@now.zone}", "%Y%m%d%H%M%S%Z")
+      return EXPIRES_DAY <= (@now - created_on).to_i
+    end
 
     targets = comments.select { |comment|
       created_on = DateTime::strptime("#{comment['created_on']}#{@now.zone}", "%Y%m%d%H%M%S%Z")
@@ -66,8 +69,6 @@ class BacklogOverlookedNotifier
     project_keys = get_project_keys
     project_keys.each { |name|
       issues = find_issues(name)
-      next if issues.empty?
-
       issues.each { |issue|
         next unless overlooked_issue?(issue)
         post_comment(issue)
