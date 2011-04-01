@@ -5,18 +5,19 @@ require "xmlrpc/client"
 require "net/https"
 require "openssl"
 require "date"
+require "pit"
+require "optparse"
 
-SPACE = "please input space key"
-USER = "please input user id"
-PASS = "please input user password"
-PROJECT_KEYS = ["please input project key"]
+PROJECT_KEYS = ARGV
 EXPIRES_DAY = 3
 BUG = "バグ"
 MESSAGE = "こちら確認して頂けましたでしょうか？"
 
 class BacklogOverlookedNotifier
-  def initialize
-    @client = XMLRPC::Client.new(SPACE, "/XML-RPC", 443, nil, nil, USER, PASS, true, nil)
+  def initialize(config, options)
+    @config = config
+    @options = options
+    @client = XMLRPC::Client.new(config["space_url"], "/XML-RPC", 443, nil, nil, config["user"], config["password"], true, nil)
   end
 
   def get_project_keys
@@ -24,7 +25,7 @@ class BacklogOverlookedNotifier
   end
 
   def get_user
-    @client.call("backlog.getUser", USER)
+    @client.call("backlog.getUser", @config["user"])
   end
 
   def find_issues(project_name)
@@ -52,15 +53,18 @@ class BacklogOverlookedNotifier
       comment["created_user"]["id"] != @user["id"] ||
       (@now - created_on).to_i < EXPIRES_DAY
     }
-    return targets.empty?
+
+    targets.empty?
   end
 
   def post_comment(issue)
-    @client.call("backlog.addComment", {
-        :key => issue["key"],
-        :content => MESSAGE
-      })
-    puts "commented to #{issue['key']}"
+    unless @options[:dryrun]
+      @client.call("backlog.addComment", {
+          :key => issue["key"],
+          :content => MESSAGE
+        })
+    end
+    puts "commented to #{issue['url']}"
   end
 
   def execute
@@ -72,9 +76,23 @@ class BacklogOverlookedNotifier
       issues.each { |issue|
         next unless overlooked_issue?(issue)
         post_comment(issue)
+
+        sleep(1)
       }
     }
   end
 end
 
-BacklogOverlookedNotifier.new.execute
+options = {}
+opts = OptionParser.new("Usage: backlog-overlooked-notifier [options] project_key project_key ...") do |opt|
+  opt.on("-n", "--dry-run", "perform a trial run with no post comment") { |val| options[:dryrun] = val }
+  opt.parse!(ARGV)
+end
+
+config = Pit.get("backlog", :require => {
+    "space_url" => "your space url in backlog. ex) demo.backlog.jp",
+    "user" => "your name in backlog. ex) demo",
+    "password" => "your password in backlog. ex) demo"
+  })
+
+BacklogOverlookedNotifier.new(config, options).execute
