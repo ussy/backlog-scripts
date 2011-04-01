@@ -8,7 +8,6 @@ require "date"
 require "pit"
 require "optparse"
 
-PROJECT_KEYS = ARGV
 EXPIRES_DAY = 3
 BUG = "バグ"
 MESSAGE = "こちら確認して頂けましたでしょうか？"
@@ -18,10 +17,6 @@ class BacklogOverlookedNotifier
     @config = config
     @options = options
     @client = XMLRPC::Client.new(config["space_url"], "/XML-RPC", 443, nil, nil, config["user"], config["password"], true, nil)
-  end
-
-  def get_project_keys
-    PROJECT_KEYS
   end
 
   def get_user
@@ -67,10 +62,9 @@ class BacklogOverlookedNotifier
     puts "commented to #{issue['url']}"
   end
 
-  def execute
+  def execute(project_keys)
     @now = DateTime.now
     @user = get_user
-    project_keys = get_project_keys
     project_keys.each { |name|
       issues = find_issues(name)
       issues.each { |issue|
@@ -95,4 +89,4 @@ config = Pit.get("backlog", :require => {
     "password" => "your password in backlog. ex) demo"
   })
 
-BacklogOverlookedNotifier.new(config, options).execute
+BacklogOverlookedNotifier.new(config, options).execute(ARGV)
